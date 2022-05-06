@@ -2,6 +2,8 @@ const express = require('express');
 const User = require('../models/user');
 const router = new express.Router()
 const auth = require('../middleware/auth')
+const upload = require('../middleware/multerMiddleware')
+const {lastEmail} = require('../emails/postmark')
 
 
 router.post('/users/signup', async (req, res) => {
@@ -57,22 +59,8 @@ router.get('/users/me', auth, async (req, res) => {
     res.send(req.user)
 });
 
-router.get('/users/:id', async (req, res) => {
-    const _id = req.params.id;
 
-    try {
-        const user = await User.findById(_id);
-        res.send(user);
-
-    } catch (error) {
-        if (error.name == 'CastError') {
-            return res.status(404).send();
-         }
-            res.status(500).send(error)
-    }
-})
-
-router.patch('/users/:id', async (req, res) => {
+router.patch('/users/me', auth, async (req, res) => {
 
     const requested = Object.keys(req.body);
     const allowed = ['name', 'email', 'password'];
@@ -83,11 +71,11 @@ router.patch('/users/:id', async (req, res) => {
     }
 
     try {
-        const user = await User.findById(req.params.id);
-        requested.forEach((request) => user[request] = req.body[request])
 
-        await user.save();
-        res.send(user)
+        requested.forEach((request) => req.user[request] = req.body[request])
+
+        await req.user.save();
+        res.send(req.user)
 
     } catch (error) {
         if (error.name == 'CastError') {
@@ -100,22 +88,38 @@ router.patch('/users/:id', async (req, res) => {
 
 })
 
-router.delete('/users/:id', async (req, res) => {
+router.delete('/users/me', auth, async (req, res) => {
 
     try {
-        const user = await User.findByIdAndDelete(req.params.id);
-        if (!user) {
-            return res.status(404).send()
-        }
-
-        res.send(user);
+        lastEmail(req.user.email, req.user.name)
+        await req.user.remove();
+        res.status(202).send(req.user);
 
     } catch (error) {
-        if (error.name == 'CastError') {
-            return res.status(404).send()
-        }
         return res.status(500).send(error)
     }
+})
+
+router.post('/users/me/avatar', auth, upload.single('avatar'), async(req, res) => {
+
+    req.user.avatar = req.file.buffer
+    await req.user.save();
+    res.status(200).send({message: 'File is uploaded.'})
+
+}, (error, req, res, next) => {
+
+    res.status(400).send({error: error.message})
+})
+
+router.delete('/users/me/avatar', auth, async (req, res) => {
+    try {
+        req.user.avatar = undefined;
+        await req.user.save();
+        res.status(202).send({message: 'File is deleted.'})
+    } catch (error) {
+        res.status(400).send(error)
+    }
+    
 })
 
 module.exports = router;

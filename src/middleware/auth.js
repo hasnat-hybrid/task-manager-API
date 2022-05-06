@@ -5,7 +5,7 @@ const auth = async (req, res, next) => {
 
     try {
         const token = req.header('Authorization').replace('Bearer ', '');
-        const decoded = jwt.verify(token, 'nodejs');
+        const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
         const user = await User.findOne({ '_id': decoded._id, 'tokens.token': token})
 
         if (!user) {
@@ -17,7 +17,7 @@ const auth = async (req, res, next) => {
         next()
 
     } catch (error) {
-        res.status(401).send('Provided token is Incorrect.')
+        res.status(401).send('Authentication failed.')
     }
 }
 
